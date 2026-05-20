@@ -1,4 +1,4 @@
-// api/card.js - DEBUG VERSION
+// api/card.js - Proxy con headers browser-like completi
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -8,74 +8,63 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Metodo 1: Prova a leggere i parametri in 3 modi diversi
-    const url = new URL(req.url, `https://${req.headers.host || 'localhost'}`);
-    const id = req.query?.id || url.searchParams.get('id');
-    const q = req.query?.q || url.searchParams.get('q');
+    const { id, q } = req.query;
     
-    console.log('🔍 DEBUG - req.query:', req.query);
-    console.log('🔍 DEBUG - url.searchParams:', Object.fromEntries(url.searchParams));
-    console.log('🔍 DEBUG - extracted id:', id, 'q:', q);
-
     if (!id && !q) {
       return res.status(400).json({ error: 'Missing id or query' });
     }
 
-    // Costruisci URL ESATTAMENTE come nel browser
+    // Costruisci URL
     let apiUrl;
     if (id) {
       apiUrl = `https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${id}`;
     } else {
       apiUrl = `https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(q)}`;
     }
-    
-    console.log('🌐 Fetching URL:', apiUrl);
 
-    // Fetch SENZA headers personalizzati (proviamo il minimo indispensabile)
+    // ✅ HEADERS COMPLETI CHE MIMANO UN BROWSER REALE
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        // Solo User-Agent minimale
-        'User-Agent': 'KardaraBot/1.0'
-      }
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9,it;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'cross-site',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+      // Disabilita cache di Vercel per evitare risposte stale
+      cache: 'no-store'
     });
 
-    console.log('📡 Response status:', response.status);
-    
-    const rawText = await response.text();
-    console.log('📦 Raw response (first 300 chars):', rawText.substring(0, 300));
-
-    // Prova a parsare
-    let data;
-    try {
-      data = JSON.parse(rawText);
-    } catch (e) {
-      console.error('❌ JSON parse error:', e.message);
-      return res.status(500).json({ error: 'Invalid JSON from YGOPRODeck', raw: rawText.substring(0, 200) });
-    }
+    const data = await response.json();
 
     if (!response.ok || !data.data?.length) {
-      console.log('❌ YGOPRODeck returned error or empty data');
       return res.status(404).json({ 
         error: 'Not found', 
-        ygoprodeck_error: data.error,
-        raw_preview: rawText.substring(0, 200)
+        details: data.error || 'No cards found',
+        status: response.status
       });
     }
 
     const card = data.data[0];
-    console.log('✅ Success! Card:', card.name);
     
     return res.status(200).json({
       id: String(card.id),
       name: card.name,
       image: card.card_images?.[0]?.image_url,
+      type: card.type,
       atk: card.atk,
-      def: card.def
+      def: card.def,
+      level: card.level,
+      race: card.race
     });
 
   } catch (err) {
-    console.error('💥 CATCH ERROR:', err.message, err.stack);
     return res.status(500).json({ error: 'Server error', details: err.message });
   }
 }
