@@ -1,8 +1,8 @@
-// api/card.js - Proxy YGOPRODeck con User-Agent
-export const config = { runtime: 'edge' };
+// api/card.js - Proxy YGOPRODeck (Node.js Runtime)
 
-export default async function handler(req) {
-  const url = new URL(req.url);
+export default async function handler(req, res) {
+  // Supporta sia Edge che Node.js style
+  const url = new URL(req.url, `https://${req.headers.host}`);
   const id = url.searchParams.get('id');
   const query = url.searchParams.get('q');
 
@@ -21,40 +21,43 @@ export default async function handler(req) {
       apiUrl += `fname=${encodeURIComponent(query)}`;
     }
 
-    // ✅ AGGIUNGIAMO L'HEADER USER-AGENT (fondamentale!)
+    // Fetch con headers completi
     const response = await fetch(apiUrl, {
       headers: {
-        'User-Agent': 'KardaraApp/1.0 (https://kardara.app)'
-      }
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      },
+      // Cache disabilitata per test
+      cache: 'no-store'
     });
     
-    const text = await response.text();
+    const data = await response.json();
 
-    if (!response.ok) {
-      return new Response(JSON.stringify({ error: 'Not found', status: response.status }), { 
+    if (!response.ok || !data.data || !Array.isArray(data.data) || data.data.length === 0) {
+      return new Response(JSON.stringify({ 
+        error: 'Not found', 
+        details: data.error || 'No cards found' 
+      }), { 
         status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    const json = JSON.parse(text);
-    
-    if (!json.data || !Array.isArray(json.data) || json.data.length === 0) {
-      return new Response(JSON.stringify({ error: 'No cards found' }), { 
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    const card = json.data[0];
+    const card = data.data[0];
     
     return new Response(JSON.stringify({
       id: String(card.id),
       name: card.name,
-      image: card.card_images?.[0]?.image_url || null
+      image: card.card_images?.[0]?.image_url || null,
+      type: card.type,
+      atk: card.atk,
+      def: card.def
     }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
     });
 
   } catch (err) {
