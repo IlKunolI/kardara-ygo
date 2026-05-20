@@ -1,4 +1,4 @@
-// api/card.js - Proxy MINIMO per YGOPRODeck
+// api/card.js - Proxy YGOPRODeck con User-Agent
 export const config = { runtime: 'edge' };
 
 export default async function handler(req) {
@@ -14,7 +14,6 @@ export default async function handler(req) {
   }
 
   try {
-    // Costruiamo URL SENZA parametri extra che potrebbero rompere
     let apiUrl = 'https://db.ygoprodeck.com/api/v7/cardinfo.php?';
     if (id) {
       apiUrl += `id=${id}`;
@@ -22,13 +21,14 @@ export default async function handler(req) {
       apiUrl += `fname=${encodeURIComponent(query)}`;
     }
 
-    console.log('🔍 Fetching:', apiUrl); // Log per debug su Vercel
-
-    const response = await fetch(apiUrl);
-    const text = await response.text(); // Leggiamo come testo prima
+    // ✅ AGGIUNGIAMO L'HEADER USER-AGENT (fondamentale!)
+    const response = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'KardaraApp/1.0 (https://kardara.app)'
+      }
+    });
     
-    console.log('📦 Status:', response.status);
-    console.log('📦 Response preview:', text.substring(0, 200));
+    const text = await response.text();
 
     if (!response.ok) {
       return new Response(JSON.stringify({ error: 'Not found', status: response.status }), { 
@@ -48,7 +48,6 @@ export default async function handler(req) {
 
     const card = json.data[0];
     
-    // Restituiamo solo i campi essenziali
     return new Response(JSON.stringify({
       id: String(card.id),
       name: card.name,
@@ -59,7 +58,6 @@ export default async function handler(req) {
     });
 
   } catch (err) {
-    console.error('❌ Error:', err.message);
     return new Response(JSON.stringify({ error: 'Server error', details: err.message }), { 
       status: 500,
       headers: { 'Content-Type': 'application/json' }
